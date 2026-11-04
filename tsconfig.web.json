@@ -1,0 +1,10 @@
+{
+  // 浏览器侧：WebUI 面板。只 import type 框架模块，运行时不带上游代码。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["src/webui/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,100 @@
+{
+  "tools": [
+    {
+      "name": "weather_now",
+      "description": "Read the latest current weather for the configured location: condition, temperature, feels-like, humidity, wind, precipitation and pressure when the provider supplies them. Read-only.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "读取配置地点的最新现在天气。",
+        "en": "Reads the latest current weather for the configured location."
+      }
+    },
+    {
+      "name": "weather_forecast",
+      "description": "Read the latest forecast at roughly 1, 6, 12, 24 and 48 hours ahead for the configured location. The receipt states whether each value is hourly, 3-hourly or a daily day/night period.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "读取配置地点未来 1/6/12/24/48 小时的天气，并注明精度是逐小时、3 小时还是逐日。",
+        "en": "Reads the forecast at roughly 1, 6, 12, 24 and 48 hours ahead, stating whether each value is hourly, 3-hourly or daily."
+      }
+    },
+    {
+      "name": "weather_alerts",
+      "description": "Read the active weather alerts for the configured location. Alerts are normalized to the China Meteorological Administration four-level system (blue, yellow, orange, red); a provider without alerts is reported as such.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "读取配置地点生效中的天气预警，等级统一为中央气象台的蓝/黄/橙/红四级。",
+        "en": "Reads active alerts, normalized to the CMA blue/yellow/orange/red levels."
+      }
+    }
+  ],
+  "events": [
+    {
+      "type": "weather.now",
+      "description": {
+        "zh": "现在天气：每次成功取数后递来，正文带数据源的发布时间；旧事件还没投递时会被新事件撤回。",
+        "en": "Current weather after a successful fetch, with the provider publication time; an undelivered older one is withdrawn."
+      },
+      "trigger": "piggyback",
+      "tags": [
+        "snapshot"
+      ]
+    },
+    {
+      "type": "weather.forecast",
+      "description": {
+        "zh": "未来天气：1/6/12/24/48 小时后的天气；逐日源会在正文里注明精度。旧事件还没投递时会被新事件撤回。",
+        "en": "Forecast at 1/6/12/24/48 hours ahead; daily-only providers say so in the text. An undelivered older one is withdrawn."
+      },
+      "trigger": "piggyback",
+      "tags": [
+        "snapshot"
+      ]
+    },
+    {
+      "type": "weather.alert",
+      "description": {
+        "zh": "天气预警：预警新增、解除或等级变化时递来，正文统一为中央气象台体系；没有变化就不重复投递。",
+        "en": "Weather alerts when they appear, clear or change level, normalized to the CMA system; no repeat when unchanged."
+      },
+      "trigger": "flush"
+    },
+    {
+      "type": "weather.next_day",
+      "description": {
+        "zh": "每晚推送：到设定时刻递来明天的天气和当前生效中的预警，一天一次；需要打开「每晚推送」。",
+        "en": "Nightly push at the configured time: tomorrow weather plus the alerts currently in force, once a day when the nightly switch is on."
+      },
+      "trigger": "flush"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "worlds.weather.envPrompt",
+      "title": "天气 · 环境提示词",
+      "role": "envPrompt",
+      "content": "天气把三类事实交给你：现在天气、未来天气、天气预警。三者在设置里各有开关，至少保留一项；操作者把三项都关掉时，扩展会自动恢复「现在天气」。\n\n「现在天气」是最近一次成功取数时的实况，正文会带数据源的发布时间和观测时间。它可能已经过去一阵了；如果你需要确认此刻，可以用 weather_now 再查一次，但不要为了确认同一件事反复调用。\n\n「未来天气」固定给 1、6、12、24、48 小时后的值。不同数据源的精度不同：逐小时源给具体时次；接口盒子是 3 小时粒度；中央气象台只有逐日预报，会按目标时刻属于白天还是夜间取当天或次日的高低温。正文里会注明每条值的精度，不要把逐日值当成精确的逐小时预报。\n\n「天气预警」只在预警新增、解除或等级变化时投递，等级统一成中央气象台的四级体系：蓝色、黄色、橙色、红色。没有变化不会重复报警。数据源没有预警能力时，正文会明确说没有，而不是说「没有预警」——这两句话含义不同。\n\n公开天气接口都是轮询，不是服务端主动推送。扩展在 Coopanion 启动时取一次，之后取数排在从本地凌晨 00:00 起算的整点时次上：间隔设 6 小时就是 00:00、06:00、12:00、18:00 各取一次，间隔 7 小时就是 00:00、07:00、14:00、21:00，之后回到次日 00:00。正文里的发布时间说明数据本身有多新。\n\n操作者还可以打开「每晚推送」。到设定时刻（默认 20:00，一天一次）会递来一条明天天气加当前生效中的预警：明天的部分只有该数据源给出明天的逐日或逐小时预报时才有内容，预警部分列的是此刻生效中的列表，数据源不预报之后才会出现的预警。这条只在开关打开时出现，别把它当成每次对话都能看到的信息。\n\n现在天气和未来天气默认随其它事件排队投递，不主动叫醒你；预警会立即投递，因为它时间敏感。天气是事实，不是请求：要不要因此开口、用什么语气，由你按自己的人设和你们此刻的关系决定，也可以什么都不做。\n\n数据源限制要记住：中央气象台公开接口没有逐小时预报；接口盒子是 3 小时粒度；Open-Meteo 不提供天气预警；中国气象数据网默认接入的是地面观测资料，没有未来预报，天气预警也需要另购。需要更细的预报或预警时，提醒操作者换一个数据源，而不是编造缺失的值。\n"
+    }
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "real": {
+    "station": {
+      "code": "Wqsps",
+      "province": "北京市",
+      "city": "北京",
+      "url": "/publish/forecast/ABJ/beijing.html"
+    },
+    "publish_time": "2026-11-02 20:15",
+    "weather": {
+      "temperature": 8.5,
+      "temperatureDiff": 0.6,
+      "airpressure": 9999.0,
+      "humidity": 67.0,
+      "rain": 0.0,
+      "rcomfort": 46,
+      "icomfort": -2,
+      "info": "-",
+      "img": "9999",
+      "feelst": 7.4
+    },
+    "wind": {
+      "direct": "西南风",
+      "degree": 198.0,
+      "power": "微风",
+      "speed": 0.8
+    },
+    "warn": {
+      "alert": "9999",
+      "pic": "9999",
+      "province": "9999",
+      "city": "9999",
+      "url": "9999",
+      "issuecontent": "9999",
+      "issuetime": "",
+      "fmeans": "9999",
+      "signaltype": "9999",
+      "signallevel": "9999",
+      "pic2": "9999"
+    },
+    "sunriseSunset": {
+      "sunrise": "2026-11-02 06:43",
+      "sunset": "2026-11-02 17:11"
+    }
+  },
+  "predict": {
+    "station": {
+      "code": "Wqsps",
+      "province": "北京市",
+      "city": "北京",
+      "url": "/publish/forecast/ABJ/beijing.html"
+    },
+    "publish_time": "2026-11-02 20:00",
+    "detail": [
+      {
+        "date": "2026-11-02",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "9999",
+            "img": "9999",
+            "temperature": "9999"
+          },
+          "wind": {
+            "direct": "9999",
+            "power": "9999"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "3"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-03",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "19"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "5"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-04",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "13"
+          },
+          "wind": {
+            "direct": "南风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "4"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-05",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "17"
+          },
+          "wind": {
+            "direct": "西北风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "2"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-06",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "10"
+          },
+          "wind": {
+            "direct": "东北风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "0"
+          },
+          "wind": {
+            "direct": "西南风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-07",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "10"
+          },
+          "wind": {
+            "direct": "南风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "1"
+          },
+          "wind": {
+            "direct": "北风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      },
+      {
+        "date": "2026-11-08",
+        "pt": "2026-11-02 20:00",
+        "day": {
+          "weather": {
+            "info": "多云",
+            "img": "1",
+            "temperature": "11"
+          },
+          "wind": {
+            "direct": "西南风",
+            "power": "微风"
+          }
+        },
+        "night": {
+          "weather": {
+            "info": "晴",
+            "img": "0",
+            "temperature": "2"
+          },
+          "wind": {
+            "direct": "西风",
+            "power": "微风"
+          }
+        },
+        "precipitation": 0.0
+      }
+    ]
+  },
+  "air": {
+    "forecasttime": "2026-11-02 19:00",
+    "aqi": 91,
+    "aq": 2,
+    "text": "良",
+    "aqiCode": "99006;99009;99010;99011;99012;99013;99014;99015;99016"
+  }
+}

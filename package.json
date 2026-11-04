@@ -1,0 +1,75 @@
+{
+  "name": "cortico-world-weather",
+  "version": "0.1.2",
+  "type": "module",
+  "description": "Cortico World: hands Coo current weather, 1/6/12/24/48-hour forecasts and China Meteorological Administration-style alerts from seven selectable providers",
+  "license": "MIT",
+  "author": {
+    "name": "bluemika111",
+    "email": "55210935+bluemika111@users.noreply.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bluemika111/cortico-world-weather.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "keywords": [
+    "cortico-world",
+    "cortico",
+    "weather",
+    "forecast",
+    "alerts",
+    "china"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.28.6",
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "displayName": "Weather",
+    "webUiClient": "dist/webui.js",
+    "locales": {
+      "zh": {
+        "displayName": "天气",
+        "description": "把现在天气、未来 1/6/12/24/48 小时天气和中央气象台体系的天气预警交给她；数据源可换，取数排在从凌晨 00:00 起算的时次，三类信息各有开关，还可每晚推送次日天气与预警。"
+      },
+      "en": {
+        "displayName": "Weather",
+        "description": "Hands Coo current conditions, 1/6/12/24/48-hour forecasts and CMA-style alerts. Seven providers, fetch slots counted from local midnight, per-section switches, and an optional nightly next-day push."
+      }
+    },
+    "tags": [
+      "internet",
+      "injection-risk"
+    ],
+    "describe": "describe.json"
+  },
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "describe.json"
+  ],
+  "scripts": {
+    "build": "esbuild src/webui/client.ts --bundle --format=esm --platform=browser --target=es2020 --outfile=dist/webui.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "describe": "tsx scripts/gen-describe.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "cortico": "0.2.3",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
