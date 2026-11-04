@@ -1,12 +1,12 @@
 {
   "name": "cortico-world-weather",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Cortico World: hands Coo current weather, 1/6/12/24/48-hour forecasts and China Meteorological Administration-style alerts from seven selectable providers",
   "license": "MIT",
   "author": {
     "name": "bluemika111",
-    "email": "55210935+bluemika111@users.noreply.github.com"
+    "email": "155210935+bluemika111@users.noreply.github.com"
   },
   "repository": {
     "type": "git",
