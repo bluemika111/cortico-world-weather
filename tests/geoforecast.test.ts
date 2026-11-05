@@ -18,7 +18,10 @@ import {
 } from '../src/location.ts';
 import { buildHorizons } from '../src/forecast.ts';
 import {
+  detailOptions,
+  normalizeHorizons,
   normalizeSections,
+  parseDetailMode,
   parseNightlyTime,
   parseRefreshHours,
   WEATHER_DEFAULTS,
@@ -91,6 +94,28 @@ describe('设置归一化', () => {
       alerts: true,
       coerced: false,
     });
+  });
+
+  it('详略只认 brief，其余按详细', () => {
+    expect(parseDetailMode('brief')).toBe('brief');
+    expect(parseDetailMode('detailed')).toBe('detailed');
+    expect(parseDetailMode('')).toBe('detailed');
+    expect(parseDetailMode(undefined)).toBe('detailed');
+    expect(detailOptions('zh').map((option) => option.value)).toEqual(['brief', 'detailed']);
+    expect(detailOptions('en')[0].label).toBe('Brief');
+  });
+
+  it('时次开关按选中的留下，全关时保留 24 小时', () => {
+    expect(normalizeHorizons({ horizon1h: false, horizon6h: true, horizon12h: false, horizon24h: true, horizon48h: false }).hours).toEqual([6, 24]);
+    const coerced = normalizeHorizons({
+      horizon1h: false,
+      horizon6h: false,
+      horizon12h: false,
+      horizon24h: false,
+      horizon48h: false,
+    });
+    expect(coerced).toEqual({ hours: [24], coerced: true });
+    expect(normalizeHorizons(WEATHER_DEFAULTS).hours).toEqual([1, 6, 12, 24, 48]);
   });
 });
 

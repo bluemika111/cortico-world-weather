@@ -3,7 +3,8 @@
  * - 启动时取一次，之后在本地凌晨 00:00 起算的整点时次轮询；
  * - 「现在天气」「未来天气」每轮都投递，旧的那条未投递事件先撤回；
  * - 「天气预警」只在新增、解除或等级变化时投递，避免重复报警；
- * - 三类信息至少保留一项，全关时自动恢复「现在天气」；
+ * - 正文全部按外部事件投递：数据源写的文本不能被当成我们自己的话；
+ * - 三类信息至少保留一项，全关时自动恢复「现在天气」；未来时次同理，全关保留 24 小时；
  * - 另可打开「每晚推送」，到点递一条明天的天气加当前生效预警。
  */
 import { fileURLToPath } from 'node:url';
@@ -18,8 +19,10 @@ import type {
 } from 'cortico/core/types.ts';
 import { nowIso } from 'cortico/core/util.ts';
 import {
+  normalizeHorizons,
   normalizeSections,
   needsCoordinates,
+  parseDetailMode,
   parseNightlyTime,
   parseProvider,
   parseRefreshHours,
@@ -34,7 +37,7 @@ import { makeFetchJson } from './http.ts';
 import { fetchWeather } from './providers/index.ts';
 import { formatDateKey, formatLocalDateTime, nextSlotAt, nextWallClockAt, tomorrowNoonMs } from './location.ts';
 import { renderAlerts, renderForecast, renderNextDay, renderNow, renderWeatherError } from './model-text.ts';
-import type { FetchJson, WeatherSnapshot } from './types.ts';
+import type { DetailMode, FetchJson, HorizonHours, WeatherSnapshot } from './types.ts';
 
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
 const TICK_MS = 30_000;
@@ -54,7 +57,7 @@ export const WEATHER_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = [
   {
     name: 'weather_forecast',
     description:
-      'Read the latest forecast at roughly 1, 6, 12, 24 and 48 hours ahead for the configured location. The receipt states whether each value is hourly, 3-hourly or a daily day/night period.',
+      'Read the latest forecast at the enabled horizons among roughly 1, 6, 12, 24 and 48 hours ahead for the configured location. The receipt states whether each value is hourly, 3-hourly or a daily day/night period.',
     tags: ['read'],
     parameters: { type: 'object', additionalProperties: false, properties: {} },
   },
@@ -129,6 +132,16 @@ export class WeatherWorld implements World {
     return withTrimmedText(this.opts.cfg);
   }
 
+  /** 事件正文用详略与时次开关；工具回执只跟随时次，要素永远写全。 */
+  private display(): { nowDetail: DetailMode; forecastDetail: DetailMode; hours: readonly HorizonHours[] } {
+    const cfg = this.cfg;
+    return {
+      nowDetail: parseDetailMode(cfg.nowDetail),
+      forecastDetail: parseDetailMode(cfg.forecastDetail),
+      hours: normalizeHorizons(cfg).hours,
+    };
+  }
+
   envPromptVars(): Record<string, string> {
     return {};
   }
@@ -155,17 +168,31 @@ export class WeatherWorld implements World {
 
   webUi(language?: string): WorldWebUiDecl {
     const zh = language !== 'en';
+    const lang = language === 'en' ? 'en' : 'zh';
     const cfg = this.cfg;
     const provider = parseProvider(cfg.provider);
+    const display = this.display();
+    const detailName = (mode: DetailMode): string =>
+      mode === 'brief' ? (zh ? '简略' : 'brief') : zh ? '详细' : 'detailed';
     return {
       label: zh ? '天气' : 'Weather',
-      config: [weatherConfigGroup(language === 'en' ? 'en' : 'zh')],
+      config: [weatherConfigGroup(lang)],
       badges: [
-        { label: zh ? '数据源' : 'Provider', value: providerLabel(provider, language === 'en' ? 'en' : 'zh'), tone: 'plain' },
+        { label: zh ? '数据源' : 'Provider', value: providerLabel(provider, lang), tone: 'plain' },
         { label: zh ? '位置' : 'Location', value: cfg.city || cfg.province || '-', tone: 'plain' },
         {
           label: zh ? '取数时次' : 'Slots',
           value: zh ? `00:00 起每 ${parseRefreshHours(cfg.requestEvery)} 小时` : `every ${parseRefreshHours(cfg.requestEvery)}h from 00:00`,
+          tone: 'plain',
+        },
+        {
+          label: zh ? '详略' : 'Detail',
+          value: `${zh ? '现在' : 'now'} ${detailName(display.nowDetail)} · ${zh ? '未来' : 'fc'} ${detailName(display.forecastDetail)}`,
+          tone: 'plain',
+        },
+        {
+          label: zh ? '时次' : 'Horizons',
+          value: `${display.hours.join('/')} h`,
           tone: 'plain',
         },
         {
@@ -179,8 +206,8 @@ export class WeatherWorld implements World {
           id: 'settings',
           title: zh ? '天气开关' : 'Weather switches',
           description: zh
-            ? '现在天气、未来天气、天气预警至少保留一项；只剩最后一项时不能关闭。'
-            : 'Current conditions, forecast and alerts: at least one stays on; the last one cannot be switched off.',
+            ? '现在天气、未来天气、天气预警至少保留一项；未来的五个时次至少保留一个。详略与时次只作用于主动投递的事件。'
+            : 'Current, forecast and alerts: at least one stays on; at least one forecast horizon stays on. Detail level and horizons apply to delivered events.',
         },
       ],
       invoke: (panel, method) => this.invokePanel(panel, method),
@@ -203,11 +230,21 @@ export class WeatherWorld implements World {
     if (method === 'state') {
       const cfg = this.cfg;
       const sections = normalizeSections(cfg);
+      const horizons = normalizeHorizons(cfg);
       return {
         showNow: sections.now,
         showForecast: sections.forecast,
         showAlerts: sections.alerts,
         coerced: sections.coerced,
+        nowDetail: parseDetailMode(cfg.nowDetail),
+        forecastDetail: parseDetailMode(cfg.forecastDetail),
+        horizon1h: cfg.horizon1h === true,
+        horizon6h: cfg.horizon6h === true,
+        horizon12h: cfg.horizon12h === true,
+        horizon24h: cfg.horizon24h === true,
+        horizon48h: cfg.horizon48h === true,
+        horizonHours: horizons.hours,
+        horizonsCoerced: horizons.coerced,
         provider: parseProvider(cfg.provider),
         location: cfg.city || cfg.province || '-',
         interval: parseRefreshHours(cfg.requestEvery),
@@ -230,6 +267,7 @@ export class WeatherWorld implements World {
   private previewState(): Record<string, unknown> {
     const snapshot = this.snapshot;
     const cfg = this.cfg;
+    const display = this.display();
     return {
       available: Boolean(snapshot),
       fetchedAt: snapshot ? formatLocalDateTime(snapshot.fetchedAtMs, snapshot.timezone) : null,
@@ -242,8 +280,8 @@ export class WeatherWorld implements World {
         snapshot.location.longitude !== undefined
           ? `${snapshot.location.latitude.toFixed(4)}, ${snapshot.location.longitude.toFixed(4)}`
           : null,
-      now: snapshot ? renderNow(snapshot) : null,
-      forecast: snapshot ? renderForecast(snapshot) : null,
+      now: snapshot ? renderNow(snapshot, display.nowDetail) : null,
+      forecast: snapshot ? renderForecast(snapshot, display.forecastDetail, display.hours) : null,
       alerts: snapshot ? renderAlerts(snapshot) : null,
       error: this.lastRefreshError,
     };
@@ -339,7 +377,8 @@ export class WeatherWorld implements World {
       const snapshot = await this.loadSnapshot(false);
       if (!this.running || !this.host) return;
       const date = formatDateKey(tomorrowNoonMs(nowMs, this.opts.timezone), this.opts.timezone);
-      await this.push(this.host, 'weather.next_day', renderNextDay(snapshot, sections), { trigger: 'flush' }, undefined, {
+      const text = renderNextDay(snapshot, sections, this.display().forecastDetail);
+      await this.push(this.host, 'weather.next_day', text, { trigger: 'flush' }, undefined, {
         provider: snapshot.provider,
         date,
         nightly: true,
@@ -381,6 +420,10 @@ export class WeatherWorld implements World {
     if (sections.coerced) {
       this.warnOnce('toggles', '天气设置里三项都关了；已自动保留「现在天气」。');
     }
+    const display = this.display();
+    if (normalizeHorizons(cfg).coerced) {
+      this.warnOnce('horizons', '未来天气的五个时次都关了；已自动保留「24 小时后」。');
+    }
 
     const snapshot = await this.loadSnapshot(force);
     this.lastRefreshError = null;
@@ -390,7 +433,7 @@ export class WeatherWorld implements World {
 
     if (sections.now) {
       if (snapshot.capabilities.now && snapshot.now) {
-        await this.pushReplace(host, 'weather.now', renderNow(snapshot), 'piggyback', 'now', ['snapshot']);
+        await this.pushReplace(host, 'weather.now', renderNow(snapshot, display.nowDetail), 'piggyback', 'now', ['snapshot']);
       } else {
         this.warnOnce(`now:${snapshot.provider}`, `${snapshot.providerName} 没有返回当前天气。`);
       }
@@ -398,7 +441,8 @@ export class WeatherWorld implements World {
 
     if (sections.forecast) {
       if (snapshot.capabilities.forecast && snapshot.horizons.length > 0) {
-        await this.pushReplace(host, 'weather.forecast', renderForecast(snapshot), 'piggyback', 'forecast', ['snapshot']);
+        const text = renderForecast(snapshot, display.forecastDetail, display.hours);
+        await this.pushReplace(host, 'weather.forecast', text, 'piggyback', 'forecast', ['snapshot']);
       } else if (!snapshot.capabilities.forecast) {
         this.warnOnce(`forecast:${snapshot.provider}`, `${snapshot.providerName} 不提供未来预报。`);
       }
@@ -504,7 +548,8 @@ export class WeatherWorld implements World {
       if (!snapshot.capabilities.forecast) {
         return snapshot.limitations[0] ?? `${snapshot.providerName} 不提供未来预报。`;
       }
-      return renderForecast(snapshot);
+      // 详略开关只影响主动投递的事件；工具回执把要素写全，时次仍跟开关。
+      return renderForecast(snapshot, 'detailed', this.display().hours);
     } catch (error) {
       return { text: renderWeatherError(message(error)), failed: true };
     }
@@ -560,7 +605,8 @@ export class WeatherWorld implements World {
           type,
           ts: nowIso(this.opts.timezone),
           source: this.id,
-          origin: 'internal',
+          // 天气现象、预警标题等都是数据源写的文本，必须走外部事件框定，不能当成我们自己的话。
+          origin: 'external',
           senderKey: this.id,
           text,
           ...(tags ? { tags } : {}),

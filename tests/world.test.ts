@@ -77,7 +77,62 @@ describe('Weather World', () => {
     expect(host.events[1].text).toContain('未来天气（北京）');
     expect(host.events[2].text).toContain('蓝色·暴雨');
     expect(host.events[0].source).toBe('weather');
-    expect(host.events[0].origin).toBe('internal');
+    // 正文里的天气现象、预警标题都来自数据源，必须按外部事件框定投递。
+    expect(host.events.every((event) => event.origin === 'external')).toBe(true);
+  });
+
+  it('简略只影响投递的事件，工具回执仍写全要素', async () => {
+    const world = makeWorld({ nowDetail: 'brief', forecastDetail: 'brief' }, [makeSnapshot()]);
+    const host = new FakeHost();
+    await refresh(world, host);
+    const now = host.events.find((event) => event.type === 'weather.now')!;
+    expect(now.text).toContain('- 气温：11°C');
+    expect(now.text).not.toContain('湿度');
+    expect(now.text).not.toContain('体感');
+
+    const tool = world.tools().find((item) => item.name === 'weather_now')!;
+    expect(String(await tool.handler({}, {} as ToolCallContext))).toContain('湿度：60%');
+  });
+
+  it('关掉的时次不再投递，weather_forecast 也只返回剩下的时次', async () => {
+    const world = makeWorld({ horizon1h: false, horizon6h: false, horizon12h: false, horizon48h: false }, [makeSnapshot()]);
+    const host = new FakeHost();
+    await refresh(world, host);
+    const forecast = host.events.find((event) => event.type === 'weather.forecast')!;
+    expect(forecast.text).toContain('24 小时后');
+    expect(forecast.text).not.toContain('1 小时后');
+    expect(forecast.text).not.toContain('48 小时后');
+
+    const tool = world.tools().find((item) => item.name === 'weather_forecast')!;
+    const receipt = String(await tool.handler({}, {} as ToolCallContext));
+    expect(receipt).toContain('24 小时后');
+    expect(receipt).not.toContain('12 小时后');
+  });
+
+  it('五个时次全关时自动保留 24 小时并说明', async () => {
+    const world = makeWorld(
+      { horizon1h: false, horizon6h: false, horizon12h: false, horizon24h: false, horizon48h: false },
+      [makeSnapshot()],
+    );
+    const host = new FakeHost();
+    await refresh(world, host);
+    const forecast = host.events.find((event) => event.type === 'weather.forecast')!;
+    expect(forecast.text).toContain('24 小时后');
+    expect(host.warnings.join('\n')).toContain('已自动保留「24 小时后」');
+  });
+
+  it('面板状态带详略与逐时次开关', async () => {
+    const world = makeWorld({ nowDetail: 'brief', forecastDetail: 'detailed', horizon48h: false }, [makeSnapshot()]);
+    const state = (await world.webUi!('zh').invoke!('settings', 'state', [])) as Record<string, unknown>;
+    expect(state).toMatchObject({
+      nowDetail: 'brief',
+      forecastDetail: 'detailed',
+      horizon1h: true,
+      horizon48h: false,
+      horizonHours: [1, 6, 12, 24],
+      horizonsCoerced: false,
+    });
+    expect(world.webUi!('zh').badges?.map((badge) => badge.value)).toContain('1/6/12/24 h');
   });
 
   it('只开未来天气时只投递未来天气，工具也只留一个', async () => {
@@ -342,6 +397,33 @@ describe('取数与每晚推送的排程', () => {
     expect(host.events.filter((event) => event.type === 'weather.next_day')).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(4 * 3_600_000);
     expect(host.events.filter((event) => event.type === 'weather.next_day')).toHaveLength(2);
+    await world.stop();
+  });
+
+  it('每晚推送的明天天气跟随未来天气的详略', async () => {
+    vi.setSystemTime(new Date(Date.parse('2026-11-02T19:59:30+08:00')));
+    const world = worldWith({ nightlyPush: true, forecastDetail: 'brief' }, () =>
+      makeSnapshot({
+        daily: [
+          {
+            date: '2026-11-03',
+            dayText: '多云',
+            dayTempC: 20,
+            precipitationMm: 4,
+            precipitationProbabilityPct: 60,
+            dayWindDir: '东北风',
+          },
+        ],
+      }),
+    );
+    const host = new FakeHost();
+    await world.start(host);
+    await vi.advanceTimersByTimeAsync(90_000);
+    const nightly = host.events.filter((event) => event.type === 'weather.next_day');
+    expect(nightly).toHaveLength(1);
+    expect(nightly[0].text).toContain('- 降水概率：60%');
+    expect(nightly[0].text).not.toContain('东北风');
+    expect(nightly[0].text).not.toContain('- 降水：');
     await world.stop();
   });
 

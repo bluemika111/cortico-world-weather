@@ -1,17 +1,28 @@
 /**
- * 「天气开关」面板：三项里只剩最后一项时，那一项直接禁用，不能关掉。
+ * 「天气开关」面板：三项里只剩最后一项时，那一项直接禁用，不能关掉；未来的五个时次同理。
  * 下方展示上一次成功取到的数据，并可手动刷新一次。
  * 数据源、位置与密钥仍在同一页的配置表单里改。
  */
 import type { WebUiCheckbox, WebUiPanel, WebUiPanelContext } from 'cortico/web/shared/client-panel.ts';
 
 type SectionKey = 'showNow' | 'showForecast' | 'showAlerts';
+type HorizonKey = 'horizon1h' | 'horizon6h' | 'horizon12h' | 'horizon24h' | 'horizon48h';
+type DetailKey = 'nowDetail' | 'forecastDetail';
 
 interface State {
   showNow: boolean;
   showForecast: boolean;
   showAlerts: boolean;
   coerced?: boolean;
+  nowDetail?: string;
+  forecastDetail?: string;
+  horizon1h?: boolean;
+  horizon6h?: boolean;
+  horizon12h?: boolean;
+  horizon24h?: boolean;
+  horizon48h?: boolean;
+  horizonHours?: number[];
+  horizonsCoerced?: boolean;
   provider: string;
   location: string;
   interval: number;
@@ -34,6 +45,9 @@ interface Preview {
 }
 
 const KEYS: readonly SectionKey[] = ['showNow', 'showForecast', 'showAlerts'];
+const HORIZON_KEYS: readonly HorizonKey[] = ['horizon1h', 'horizon6h', 'horizon12h', 'horizon24h', 'horizon48h'];
+const DETAIL_VALUES = ['brief', 'detailed'] as const;
+const DETAIL_KEYS: readonly DetailKey[] = ['nowDetail', 'forecastDetail'];
 
 const PROVIDER_NAMES: Record<string, { zh: string; en: string }> = {
   nmc: { zh: '中央气象台', en: 'NMC / CMA' },
@@ -66,6 +80,15 @@ const TEXT = {
     nightlyBadTime: '时刻要写成 HH:mm，例如 20:00。',
     nightlyBlocked: '「未来天气」和「天气预警」都关了，每晚推送没有内容可投递。',
     hint: 'API 所需的 ID、KEY、台站号在下方配置表单里填；缺什么会在激活或取数时报出来，并给出注册地址。和风天气 403 时优先检查配置里的 API Host。',
+    detailNow: '现在天气写到什么程度',
+    detailForecast: '未来天气写到什么程度',
+    detailBrief: '简略',
+    detailDetailed: '详细',
+    detailNote: '详略只作用于主动投递的事件；weather_now、weather_forecast 工具的回执仍把要素写全。',
+    horizonTitle: '未来天气投递哪些时次',
+    horizonNote: '至少留一个；五个都关时自动保留「24 小时后」。关闭的时次不再投递，weather_forecast 也只返回剩下的时次。',
+    horizonBlocked: '五个时次至少留一个；只剩这一个时不能关闭。',
+    horizonsCoerced: '之前五个时次都关着，已自动保留「24 小时后」；现在可以重新打开其它时次。',
     lastTitle: '上一次获取',
     lastDesc: '最近一次成功取到的数据；不会为了展示再请求互联网。',
     lastLoading: '正在读取上一次的数据…',
@@ -80,6 +103,13 @@ const TEXT = {
       showNow: '现在天气',
       showForecast: '未来天气（1/6/12/24/48 小时）',
       showAlerts: '天气预警',
+    },
+    horizonLabels: {
+      horizon1h: '1 小时后',
+      horizon6h: '6 小时后',
+      horizon12h: '12 小时后',
+      horizon24h: '24 小时后',
+      horizon48h: '48 小时后',
     },
   },
   en: {
@@ -103,6 +133,15 @@ const TEXT = {
     nightlyBadTime: 'Write the time as HH:mm, for example 20:00.',
     nightlyBlocked: 'Forecast and alerts are both off, so the nightly push has nothing to deliver.',
     hint: 'Put the required ID, KEY or station number in the config form below. Missing values are reported with the registration address. On QWeather 403, check the API Host in the config.',
+    detailNow: 'Detail level of current weather',
+    detailForecast: 'Detail level of the forecast',
+    detailBrief: 'Brief',
+    detailDetailed: 'Detailed',
+    detailNote: 'Detail level applies to delivered events only; weather_now and weather_forecast receipts always list every element.',
+    horizonTitle: 'Which forecast horizons to deliver',
+    horizonNote: 'At least one stays on; with all five off, 24 hours is kept. A closed horizon is not delivered and weather_forecast returns only the remaining ones.',
+    horizonBlocked: 'At least one horizon must stay on; the last one cannot be turned off.',
+    horizonsCoerced: 'All five horizons were off, so 24 hours was kept. You can turn the others back on now.',
     lastTitle: 'Last fetch',
     lastDesc: 'The last successfully fetched data; displaying it does not call the provider again.',
     lastLoading: 'Reading the last fetch…',
@@ -117,6 +156,13 @@ const TEXT = {
       showNow: 'Current weather',
       showForecast: 'Forecast (1/6/12/24/48 h)',
       showAlerts: 'Weather alerts',
+    },
+    horizonLabels: {
+      horizon1h: '1 hour ahead',
+      horizon6h: '6 hours ahead',
+      horizon12h: '12 hours ahead',
+      horizon24h: '24 hours ahead',
+      horizon48h: '48 hours ahead',
     },
   },
 } as const;
@@ -148,11 +194,18 @@ export const settingsPanel: WebUiPanel = {
       lastMeta.classList.add('bad');
       return;
     }
-    status.textContent = state.coerced ? S.coerced : S.ready;
+    const initialStatus = (): string => {
+      if (state.coerced) return S.coerced;
+      return state.horizonsCoerced ? S.horizonsCoerced : S.ready;
+    };
+    status.textContent = initialStatus();
     status.classList.remove('bad');
 
     const boxes = {} as Record<SectionKey, WebUiCheckbox>;
     const blocked = (key: SectionKey): boolean => !KEYS.some((other) => other !== key && boxes[other]?.checked);
+    const horizonBoxes = {} as Record<HorizonKey, WebUiCheckbox>;
+    const blockedHorizon = (key: HorizonKey): boolean =>
+      !HORIZON_KEYS.some((other) => other !== key && horizonBoxes[other]?.checked);
 
     let nightlyBox: WebUiCheckbox | undefined;
     let nightlyNote: HTMLDivElement | undefined;
@@ -161,6 +214,10 @@ export const settingsPanel: WebUiPanel = {
       for (const key of KEYS) {
         const box = boxes[key];
         if (box) box.input.disabled = box.checked && blocked(key);
+      }
+      for (const key of HORIZON_KEYS) {
+        const box = horizonBoxes[key];
+        if (box) box.input.disabled = box.checked && blockedHorizon(key);
       }
       if (nightlyBox && nightlyNote) {
         const nothingToSay = !boxes.showForecast?.checked && !boxes.showAlerts?.checked;
@@ -217,6 +274,54 @@ export const settingsPanel: WebUiPanel = {
       boxes[key] = box;
       card.body.append(box.el);
     }
+
+    // 详略只决定投递事件的正文长度；工具回执始终写全要素。
+    const detailSelects = {} as Record<DetailKey, HTMLSelectElement>;
+    const detailValue = (key: DetailKey, from: State): string => (from[key] === 'brief' ? 'brief' : 'detailed');
+    const persistDetail = async (key: DetailKey, value: string): Promise<void> => {
+      status.classList.remove('bad');
+      status.textContent = S.saving;
+      if (!(await writeConfig(key, value))) detailSelects[key].value = detailValue(key, state);
+    };
+
+    // 五个时次各自开关，至少留一个；World 侧的兜底同样是保留 24 小时。
+    const persistHorizon = async (key: HorizonKey, checked: boolean): Promise<void> => {
+      if (!checked && blockedHorizon(key)) {
+        horizonBoxes[key].setChecked(true);
+        status.textContent = S.horizonBlocked;
+        status.classList.add('bad');
+        updateDisabled();
+        return;
+      }
+      status.classList.remove('bad');
+      status.textContent = S.saving;
+      if (!(await writeConfig(key, checked))) horizonBoxes[key].setChecked(!checked);
+      updateDisabled();
+    };
+
+    for (const key of DETAIL_KEYS) {
+      const select = ctx.ui.select({
+        value: detailValue(key, state),
+        options: DETAIL_VALUES.map((value) => ({
+          value,
+          label: value === 'brief' ? S.detailBrief : S.detailDetailed,
+        })),
+        onChange: (value) => void persistDetail(key, value),
+      });
+      detailSelects[key] = select;
+      card.body.append(ctx.ui.field(key === 'nowDetail' ? S.detailNow : S.detailForecast, select));
+    }
+    card.body.append(ctx.ui.msgline(S.detailNote));
+
+    for (const key of HORIZON_KEYS) {
+      const box = ctx.ui.checkbox(S.horizonLabels[key], {
+        checked: state[key] === true,
+        onChange: (checked) => void persistHorizon(key, checked),
+      });
+      horizonBoxes[key] = box;
+      card.body.append(box.el);
+    }
+    card.body.append(ctx.ui.msgline(S.horizonNote));
 
     const hint = ctx.ui.msgline(S.hint);
     card.body.append(info, hint);
@@ -294,17 +399,27 @@ export const settingsPanel: WebUiPanel = {
 
     refreshButton.addEventListener('click', () => void refresh(), { signal: ctx.signal });
 
-    // 配置表单里换了数据源/位置/间隔时，同步面板与页面顶部的徽标。
+    // 配置表单里换了数据源/位置/间隔/详略/时次时，同步面板与页面顶部的徽标。
     const applyState = (next: State) => {
       const changed =
         next.provider !== state.provider ||
         next.location !== state.location ||
         next.interval !== state.interval ||
         next.nightlyPush !== state.nightlyPush ||
-        next.nightlyPushTime !== state.nightlyPushTime;
+        next.nightlyPushTime !== state.nightlyPushTime ||
+        detailValue('nowDetail', next) !== detailValue('nowDetail', state) ||
+        detailValue('forecastDetail', next) !== detailValue('forecastDetail', state) ||
+        (next.horizonHours ?? []).join(',') !== (state.horizonHours ?? []).join(',');
       state = next;
       for (const key of KEYS) {
         if (boxes[key].checked !== next[key]) boxes[key].setChecked(next[key]);
+      }
+      for (const key of HORIZON_KEYS) {
+        if (horizonBoxes[key].checked !== (next[key] === true)) horizonBoxes[key].setChecked(next[key] === true);
+      }
+      for (const key of DETAIL_KEYS) {
+        const value = detailValue(key, next);
+        if (detailSelects[key].value !== value) detailSelects[key].value = value;
       }
       if (nightlyBox && nightlyBox.checked !== (next.nightlyPush === true)) {
         nightlyBox.setChecked(next.nightlyPush === true);

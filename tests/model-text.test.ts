@@ -77,6 +77,63 @@ describe('交给模型的正文', () => {
   it('错误正文带原因', () => {
     expect(renderWeatherError('请求超时')).toBe('天气数据获取失败：请求超时');
   });
+
+  it('简略的现在天气只写天气与气温，不含体感', () => {
+    const text = renderNow(makeSnapshot(), 'brief');
+    expect(text).toContain('- 天气：晴');
+    expect(text).toContain('- 气温：11°C');
+    expect(text).not.toContain('体感');
+    expect(text).not.toContain('湿度');
+    expect(text).not.toContain('南风');
+    expect(text).toContain('数据源：Open-Meteo');
+  });
+
+  it('简略的未来天气写天气、气温与降水概率，不写降水量和风', () => {
+    const snapshot = makeSnapshot({
+      horizons: [1, 24].map((hours) => ({
+        hours: hours as 1 | 24,
+        targetMs: NOW + hours * 3_600_000,
+        condition: '小雨',
+        temperatureC: 9,
+        precipitationMm: 3.2,
+        precipitationProbabilityPct: 70,
+        windDir: '北风',
+        windScale: '5级',
+        granularity: 'hour' as const,
+      })),
+    });
+    const text = renderForecast(snapshot, 'brief');
+    expect(text).toContain('小雨，9°C，降水概率 70%');
+    expect(text).not.toContain('3.2 mm');
+    expect(text).not.toContain('北风');
+  });
+
+  it('时次开关只留下选中的时次', () => {
+    const text = renderForecast(makeSnapshot(), 'detailed', [6, 24]);
+    expect(text.match(/小时后（/g)).toHaveLength(2);
+    expect(text).toContain('6 小时后');
+    expect(text).toContain('24 小时后');
+    expect(text).not.toContain('1 小时后');
+    expect(text).not.toContain('48 小时后');
+  });
+
+  it('预警标题压平换行、限长并加书名号', () => {
+    const long = alert({ title: `北京市气象台\n发布暴雨蓝色预警   ${'请市民注意防范。'.repeat(30)}` });
+    const text = renderAlerts(makeSnapshot({ alerts: [long] }));
+    expect(text).toContain('- 蓝色·暴雨：「北京市气象台 发布暴雨蓝色预警 请市民注意防范。');
+    expect(text).not.toContain('\n\n');
+    expect(text).toContain('…」');
+    // 每条预警仍是一行。
+    expect(text.split('\n').filter((line) => line.startsWith('- 蓝色·'))).toHaveLength(1);
+  });
+
+  it('认不出的预警类别只保留短标签，不照抄整段原文', () => {
+    const weird = alert({ type: '某种很长的海外预警分类名称 Thunderstorm Warning Special' });
+    const text = renderAlerts(makeSnapshot({ alerts: [weird] }));
+    const line = text.split('\n').find((item) => item.startsWith('- 蓝色·'))!;
+    expect(line.split('：')[0]).toHaveLength('- 蓝色·'.length + 13);
+    expect(line).toContain('…：');
+  });
 });
 
 describe('每晚次日天气推送正文', () => {
@@ -121,6 +178,29 @@ describe('每晚次日天气推送正文', () => {
     expect(text).toContain('- 降水概率最高 60%');
     expect(text).toContain('2 个逐小时时次的汇总');
     expect(text).not.toContain('11月04日');
+  });
+
+  it('简略的明天天气不写风和降水量', () => {
+    const snapshot = makeSnapshot({
+      daily: [
+        {
+          date: '2026-11-03',
+          dayText: '多云',
+          nightText: '小雨',
+          dayTempC: 20,
+          nightTempC: 12,
+          precipitationMm: 4,
+          precipitationProbabilityPct: 60,
+          dayWindDir: '东北风',
+          dayWindScale: '3~4级',
+        },
+      ],
+    });
+    const text = renderNextDay(snapshot, sections, 'brief');
+    expect(text).toContain('- 天气：白天多云，夜间小雨');
+    expect(text).toContain('- 降水概率：60%');
+    expect(text).not.toContain('- 降水：');
+    expect(text).not.toContain('东北风');
   });
 
   it('数据源没有明天的预报时照实说', () => {

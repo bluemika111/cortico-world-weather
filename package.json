@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-weather",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "type": "module",
   "description": "Cortico World: hands Coo current weather, 1/6/12/24/48-hour forecasts and China Meteorological Administration-style alerts from seven selectable providers",
   "license": "MIT",
@@ -37,16 +37,15 @@
     "locales": {
       "zh": {
         "displayName": "天气",
-        "description": "把现在天气、未来 1/6/12/24/48 小时天气和中央气象台体系的天气预警交给她；数据源可换，取数排在从凌晨 00:00 起算的时次，三类信息各有开关，还可每晚推送次日天气与预警。"
+        "description": "把现在天气、未来 1/6/12/24/48 小时天气和中央气象台体系的天气预警交给她；数据源可换，取数排在从凌晨 00:00 起算的时次，三类信息各有开关，正文可简略可详细，未来的五个时次能逐个开关，还可每晚推送次日天气与预警。"
       },
       "en": {
         "displayName": "Weather",
-        "description": "Hands Coo current conditions, 1/6/12/24/48-hour forecasts and CMA-style alerts. Seven providers, fetch slots counted from local midnight, per-section switches, and an optional nightly next-day push."
+        "description": "Hands Coo current conditions, 1/6/12/24/48-hour forecasts and CMA-style alerts. Seven providers, fetch slots counted from local midnight, per-section switches, brief or detailed text, switchable forecast horizons, and an optional nightly next-day push."
       }
     },
     "tags": [
-      "internet",
-      "injection-risk"
+      "internet"
     ],
     "describe": "describe.json"
   },

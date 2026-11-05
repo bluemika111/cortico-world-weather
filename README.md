@@ -1,6 +1,6 @@
 # cortico-world-weather
 
-给 Coopanion（Cortico World v6）的天气扩展。它把「现在天气」「未来 1/6/12/24/48 小时天气」「天气预警」三类事实交给她，数据源可自由切换，取数排在从本地凌晨 00:00 起算的整点时次，三类信息各有开关，还可以让她每晚递一次明天的天气和当前预警。
+给 Coopanion（Cortico World v6）的天气扩展。它把「现在天气」「未来 1/6/12/24/48 小时天气」「天气预警」三类事实交给她，数据源可自由切换，取数排在从本地凌晨 00:00 起算的整点时次，三类信息各有开关，正文可选简略或详细，未来的五个时次还能逐个开关，还可以让她每晚递一次明天的天气和当前预警。
 
 - 包名：`cortico-world-weather`（Coopanion / Cortico 市场按 npm 包名安装）
 - 契约：`cortico.api = 6`，`main = ./src/index.ts`
@@ -57,21 +57,25 @@ WEATHER_PIRATE_KEY=
 | `nightlyPush` | `false` | 每晚到点递一条「明天天气 + 当前生效预警」，一天一次。 |
 | `nightlyPushTime` | `20:00` | 每晚推送的本地时刻，24 小时制 `HH:mm`；写法不对时按 20:00 处理。 |
 | `showNow` | `true` | 现在天气。 |
-| `showForecast` | `true` | 未来 1/6/12/24/48 小时。 |
+| `showForecast` | `true` | 未来天气。 |
 | `showAlerts` | `true` | 天气预警。 |
+| `nowDetail` | `detailed` | 现在天气正文的详略：`brief` 只写天气现象与气温（不含体感），`detailed` 照旧写全部要素。 |
+| `forecastDetail` | `detailed` | 未来天气正文的详略：`brief` 每个时次写天气现象、气温与降水概率，`detailed` 再加降水量与风。每晚推送的明天天气跟随这里。 |
+| `horizon1h` … `horizon48h` | `true` | 1/6/12/24/48 小时后各自开关，至少留一个；五个都关时自动保留「24 小时后」。 |
 | `cmaUserId` / `cmaApiKey` / `cmaStationId` / `cmaDataCode` / `cmaElements` | 见默认值 | 中国气象数据网。台站号默认北京 54511；要素只能填订单里订过的。 |
 | `apihzId` / `apihzKey` | 空 | 接口盒子。 |
 | `qweatherKey` | 空 | 和风天气。 |
 | `pirateWeatherKey` | 空 | Pirate Weather。 |
 
-### 三项开关至少保留一项
+### 开关、详略与时次
 
-- World 页有一块「天气开关」面板：只剩最后一项时，那一项直接禁用，点不动。
-- 如果通过配置表单把三项都关掉，运行时自动恢复「现在天气」，面板会显示这次是强制恢复的。
-- 工具列表也跟着开关走：关掉的项不再暴露对应工具。
-- 面板下方显示「上一次获取」的实况、未来与预警正文、获取时间和经纬度，并提供「刷新一次」按钮；展示不会重复请求互联网。
-- 面板每 5 秒同步一次配置；在配置表单里换了数据源/位置/间隔后，页面顶部的数据源徽标也会跟着更新。
-- 同一块面板还有「每晚推送」开关与推送时刻输入框（不属于「至少保留一项」的三项，随时可关）；「未来天气」和「天气预警」都关着时，这一组会直接说明今晚没有内容可投递。页面顶部的徽标显示取数时次（`00:00 起每 N 小时`）和每晚推送时刻或「关闭」。
+- World 页有一块「天气开关」面板：三项里只剩最后一项时那一项直接禁用，五个时次里只剩最后一个时也一样，点不动。
+- 如果通过配置表单把三项都关掉，运行时自动恢复「现在天气」；五个时次都关掉时自动保留「24 小时后」。面板会显示这次是强制恢复的。
+- 详略下拉只管主动投递的事件；`weather_now`、`weather_forecast` 的回执把要素写全，但 `weather_forecast` 只返回还开着的时次。
+- 工具列表跟着三项开关走：关掉的项不再暴露对应工具。
+- 面板下方显示「上一次获取」的实况、未来与预警正文、获取时间和经纬度，并提供「刷新一次」按钮；展示用的是当前详略与时次，也不会重复请求互联网。
+- 面板每 5 秒同步一次配置；在配置表单里换了数据源/位置/间隔/详略/时次后，页面顶部的徽标会跟着更新。
+- 同一块面板还有「每晚推送」开关与推送时刻输入框（不属于「至少保留一项」的三项，随时可关）；「未来天气」和「天气预警」都关着时，这一组会直接说明今晚没有内容可投递。页面顶部的徽标显示取数时次（`00:00 起每 N 小时`）、详略、已开启的时次和每晚推送时刻或「关闭」。
 
 ### 请求节奏
 
@@ -95,10 +99,12 @@ WEATHER_PIRATE_KEY=
 
 | 类型 | 正文 |
 |---|---|
-| `weather.now` | 天气、气温/体感、湿度、风、降水、气压、能见度、AQI；数据源与发布时间。 |
-| `weather.forecast` | 1/6/12/24/48 小时后各一条；逐小时 / 3 小时 / 逐日精度会注明；逐日源会说明按白天/夜间取值。 |
+| `weather.now` | 详略跟随 `nowDetail`。简略：天气、气温。详细：再加体感、湿度、风、降水、气压、能见度、AQI。都带数据源与发布时间。 |
+| `weather.forecast` | 已开启的时次各一条，详略跟随 `forecastDetail`；逐小时 / 3 小时 / 逐日精度会注明，逐日源会说明按白天/夜间取值。 |
 | `weather.alert` | 生效中的预警；等级统一为中央气象台蓝/黄/橙/红四级；没有变化不重复投递。 |
-| `weather.next_day` | 每晚推送：明天的天气（逐日源按白天/夜间，逐小时源按当天时次汇总）加当前生效中的预警；需要打开「每晚推送」。 |
+| `weather.next_day` | 每晚推送：明天的天气（逐日源按白天/夜间，逐小时源按当天时次汇总，详略跟随 `forecastDetail`）加当前生效中的预警；需要打开「每晚推送」。 |
+
+四类事件都用 `origin: 'external'` 投递。地名、天气现象、预警标题这些由数据源写的文本会先压平换行、限制长度（预警标题再加「」标出边界），然后按外部事件框定进入对话，不会被当成扩展自己或操作者说的话。因此本包不再声明 `injection-risk`；市场里已经打上的标签需要维护者移除，见下节。
 
 ### 工具
 
@@ -115,6 +121,21 @@ WEATHER_PIRATE_KEY=
 - Pirate Weather：`minor → 蓝`、`moderate → 黄`、`severe → 橙`、`extreme → 红`。
 - 类别：中文灾害名直接匹配（暴雨、大风、寒潮、高温……），英文标题按关键词归类；认不出的保留原标题。
 - 无法判断等级时标「未知」，不替数据源升级或降级。
+
+### 标签
+
+`package.json` 的 `cortico.tags` 只声明 `internet`：本包会向互联网请求天气数据。第三方文本的注入风险已经在投递层处理（见「事件」一节），所以不再自我声明 `injection-risk`。
+
+市场索引会沿用维护者此前打过的警示标签，直到他们移除。要摘掉已经显示的「注入风险」，需要向 <https://github.com/Pal-AI-Lab/cortico-extensions> 提一个 issue：
+
+```text
+标题：[tags] cortico-world-weather
+正文：
+package: cortico-world-weather
+remove: injection-risk
+reason: 0.2.0 起四类天气事件都按 origin:'external' 框定投递，数据源写的文本先压平限长，预警标题再加「」边界，不再符合 injection-risk 的判定条件。
+evidence: <修复提交> / <0.2.0 的 npm 页面>
+```
 
 ## 已知限制
 
@@ -135,7 +156,7 @@ WEATHER_PIRATE_KEY=
 cd cortico-world-weather
 corepack pnpm install
 corepack pnpm run build          # 面板产物 dist/webui.js
-corepack pnpm exec vitest run    # 74 个用例
+corepack pnpm exec vitest run    # 87 个用例
 corepack pnpm exec tsc --noEmit
 corepack pnpm exec tsc -p tsconfig.web.json --noEmit
 corepack pnpm run describe       # 重新生成 describe.json
@@ -153,21 +174,21 @@ corepack pnpm exec tsx scripts/extension-check.ts "<扩展目录>/cortico-world-
 | 文件 | 内容 |
 |---|---|
 | `src/definition.ts` | `WorldDefinition`：id、默认配置、前置检查、数据源下拉、工具与事件自描述。 |
-| `src/config.ts` | `worlds.weather.*` 扁平配置、配置组、开关归一化、文本项首尾空白清理。 |
+| `src/config.ts` | `worlds.weather.*` 扁平配置、配置组、开关/详略/时次归一化、文本项首尾空白清理。 |
 | `src/credentials.ts` | 凭证解析（配置优先、`.env` 兜底）、激活前检查、注册提示。 |
-| `src/world.ts` | 按时次轮询、每晚推送、缓存、事件投递/撤回、预警去重、工具、面板数据接口。 |
+| `src/world.ts` | 按时次轮询、每晚推送、缓存、事件按外部来源投递/撤回、预警去重、工具、面板数据接口。 |
 | `src/providers/` | 七个适配器；`shared.ts` 放名称、预警字段别名、AQI。 |
 | `src/forecast.ts` | 1/6/12/24/48 小时与逐日白天/夜间取值。 |
 | `src/geocode.ts` | 按省市解析经纬度、24 小时缓存、解析失败提示。 |
 | `src/location.ts` | 时区换算、00:00 起算的时次、指定时刻、省市/区县名称展开、数字/缺测值解析。 |
-| `src/model-text.ts` | 事件正文（含次日天气）与工具回执。 |
-| `src/webui/client.ts` | 「天气开关」面板：三项开关、每晚推送组、上一次获取。 |
+| `src/model-text.ts` | 事件正文（含次日天气）与工具回执：简略/详细两种写法，数据源写的文本压平限长。 |
+| `src/webui/client.ts` | 「天气开关」面板：三项开关、两个详略下拉、五个时次开关、每晚推送组、上一次获取。 |
 | `src/ENV_PROMPT.md` | 环境提示词。 |
-| `tests/` | 74 个用例：时间/时次、七个适配器、正文、World 接线、面板状态、manifest/describe。 |
+| `tests/` | 87 个用例：时间/时次、七个适配器、正文、World 接线、面板状态、manifest/describe。 |
 
 ### 测试与验证状态
 
-- `corepack pnpm exec vitest run` → 74/74 通过。
+- `corepack pnpm exec vitest run` → 87/87 通过。
 - 两端 `tsc --noEmit` → 0 错误。
 - `corepack pnpm run build` → `dist/webui.js`。
 - 扩展契约检查 → `Extension check passed.`
@@ -178,6 +199,7 @@ corepack pnpm exec tsx scripts/extension-check.ts "<扩展目录>/cortico-world-
   - 接口盒子，区县级地址：区县名返回 400 时自动回退地级市，实况 + 3 小时粒度时段预报正常。
   - Open-Meteo，区县级地址：自动解析到该区县所属地级市的经纬度，不再沿用默认城市；逐小时 96h 正常，并明确「不提供天气预警」。
   - 地名带空格（首尾半角空格与全角空格）走中央气象台：清理后实况、逐日未来与次日天气正文均正常。
+  - 0.2.0 烟测（逐日源与逐小时源各一家）：简略的实况只留天气与气温；简略的未来天气按时次给天气、气温与降水概率，详细再加降水量与风；只开 6/24 时正文只有这两条；每晚推送的明天天气跟随简略；生效中的预警标题被完整包在「」内并带发布时间。
 
 未验证：
 

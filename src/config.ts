@@ -1,7 +1,14 @@
 import type { ConfigGroup } from 'cortico/core/types.ts';
 import type { Language } from 'cortico/core/language.ts';
 import { parseHourMinute } from './location.ts';
-import { PROVIDER_IDS, type ProviderId, type WeatherSections } from './types.ts';
+import {
+  HORIZON_HOURS,
+  PROVIDER_IDS,
+  type DetailMode,
+  type HorizonHours,
+  type ProviderId,
+  type WeatherSections,
+} from './types.ts';
 
 /**
  * config.json 的 worlds.weather 段。键保持扁平；WebUI 的配置接口写不了嵌套对象。
@@ -31,6 +38,18 @@ export interface WeatherConfigSection {
   showAlerts: boolean;
   /** 到点投递一条「次日天气 + 当前预警」。 */
   nightlyPush: boolean;
+
+  /** 「现在天气」事件的详略；工具回执不受影响，永远给全。 */
+  nowDetail: DetailMode;
+  /** 「未来天气」事件与每晚推送的详略。 */
+  forecastDetail: DetailMode;
+
+  /** 五个未来时次各自是否投递；至少留一个。 */
+  horizon1h: boolean;
+  horizon6h: boolean;
+  horizon12h: boolean;
+  horizon24h: boolean;
+  horizon48h: boolean;
 
   cmaUserId: string;
   cmaApiKey: string;
@@ -63,6 +82,13 @@ export const WEATHER_DEFAULTS: WeatherConfigSection = {
   showForecast: true,
   showAlerts: true,
   nightlyPush: false,
+  nowDetail: 'detailed',
+  forecastDetail: 'detailed',
+  horizon1h: true,
+  horizon6h: true,
+  horizon12h: true,
+  horizon24h: true,
+  horizon48h: true,
   cmaUserId: '',
   cmaApiKey: '',
   cmaStationId: '54511',
@@ -131,6 +157,32 @@ export function normalizeSections(cfg: Pick<WeatherConfigSection, 'showNow' | 's
   return { now: true, forecast: false, alerts: false, coerced: true };
 }
 
+/** 详略模式：只认 brief，其余一律按 detailed。 */
+export function parseDetailMode(value: unknown): DetailMode {
+  return value === 'brief' ? 'brief' : 'detailed';
+}
+
+type HorizonFlags = Pick<
+  WeatherConfigSection,
+  'horizon1h' | 'horizon6h' | 'horizon12h' | 'horizon24h' | 'horizon48h'
+>;
+
+const horizonKey = (hours: HorizonHours): keyof HorizonFlags =>
+  `horizon${hours}h` as keyof HorizonFlags;
+
+export interface HorizonSelection {
+  hours: HorizonHours[];
+  /** 五个时次全被关掉时为 true，此时按 24 小时档兜底。 */
+  coerced: boolean;
+}
+
+/** 时次开关：至少留一个；全关时保留 24 小时档，与三项开关的兜底思路一致。 */
+export function normalizeHorizons(cfg: HorizonFlags): HorizonSelection {
+  const hours = HORIZON_HOURS.filter((value) => cfg[horizonKey(value)] === true);
+  if (hours.length > 0) return { hours, coerced: false };
+  return { hours: [24], coerced: true };
+}
+
 export function needsCoordinates(provider: ProviderId): boolean {
   return provider === 'qweather' || provider === 'openmeteo' || provider === 'pirate';
 }
@@ -157,10 +209,19 @@ export function providerOptions(language: Language): Array<{ value: string; labe
   return PROVIDER_IDS.map((provider) => ({ value: provider, label: providerLabel(provider, language) }));
 }
 
+/** 详略模式下拉；文案跟着界面语言。 */
+export function detailOptions(language: Language): Array<{ value: string; label: string }> {
+  const t = language === 'en' ? EN : ZH;
+  return [
+    { value: 'brief', label: t.detailBrief },
+    { value: 'detailed', label: t.detailDetailed },
+  ];
+}
+
 const ZH = {
   title: '天气',
   description:
-    '现在天气、未来 1/6/12/24/48 小时天气、天气预警各有开关，至少保留一项；三项都关时自动恢复「现在天气」。先选数据源，再填对应的位置与凭证。公开接口都是轮询，不是主动推送：启动时先取一次，之后从本地凌晨 00:00 起按间隔排整点取最新发布。另可打开「每晚推送」，到点递一次明天的天气和当前预警。',
+    '现在天气、未来 1/6/12/24/48 小时天气、天气预警各有开关，至少保留一项；三项都关时自动恢复「现在天气」。现在天气与未来天气还能选简略或详细，未来的五个时次可以逐个开关，至少留一个。先选数据源，再填对应的位置与凭证。公开接口都是轮询，不是主动推送：启动时先取一次，之后从本地凌晨 00:00 起按间隔排整点取最新发布。另可打开「每晚推送」，到点递一次明天的天气和当前预警。',
   provider: '数据源',
   providerDescription:
     '主选：中央气象台（免密钥，逐日预报）、中国气象数据网（需实名注册并订购，默认只有观测资料）、接口盒子（免费，需 ID+KEY，3 小时粒度）。备选：腾讯天气（免密钥）、和风天气（需 KEY）。兜底：Open-Meteo（免密钥，无预警）、Pirate Weather（需 KEY）。',
@@ -197,6 +258,21 @@ const ZH = {
   showForecastDescription: '投递五个未来时次，并保留 weather_forecast 工具。',
   showAlerts: '天气预警',
   showAlertsDescription: '投递生效中的预警。预警只在新增、解除或等级变化时投递，避免每轮重复报警。',
+  nowDetail: '现在天气的详细程度',
+  nowDetailDescription:
+    '简略只写天气现象与气温（不含体感）；详细照旧，包含湿度、风、降水、气压、能见度与空气质量。weather_now 工具的回执不受这里影响，永远给全。',
+  forecastDetail: '未来天气的详细程度',
+  forecastDetailDescription:
+    '简略每个时次写天气现象、气温与降水概率；详细照旧，再加降水量与风。每晚推送的明天天气跟随这里。weather_forecast 工具的回执不受这里影响，永远给全。',
+  horizons: '投递哪些未来时次',
+  horizonsDescription: '1/6/12/24/48 小时各自开关，至少留一个；五个都关时自动保留 24 小时。',
+  horizon1h: '1 小时后',
+  horizon6h: '6 小时后',
+  horizon12h: '12 小时后',
+  horizon24h: '24 小时后',
+  horizon48h: '48 小时后',
+  detailBrief: '简略',
+  detailDetailed: '详细',
   cmaUserId: '中国气象数据网 · 用户 ID',
   cmaUserIdDescription:
     '先在 https://data.cma.cn/ 实名注册，再到「气象 API 服务」订购资料；用户 ID 从订单或用户中心获取。旧版接口与密钥一起用；新版接口可只填密钥。',
@@ -228,7 +304,7 @@ const ZH = {
 const EN = {
   title: 'Weather',
   description:
-    'Current conditions, 1/6/12/24/48-hour forecasts and alerts each have a switch; at least one stays on, and all-off falls back to current conditions. Pick a provider, then fill its location and credentials. Public endpoints are polled, not pushed: one fetch at startup, then the latest publication on slots counted from local midnight. A nightly push can deliver tomorrow weather and the alerts in force.',
+    'Current conditions, 1/6/12/24/48-hour forecasts and alerts each have a switch; at least one stays on, and all-off falls back to current conditions. Current and forecast text can be brief or detailed, and each forecast horizon can be switched off as long as one stays on. Pick a provider, then fill its location and credentials. Public endpoints are polled, not pushed: one fetch at startup, then the latest publication on slots counted from local midnight. A nightly push can deliver tomorrow weather and the alerts in force.',
   provider: 'Provider',
   providerDescription:
     'Primary: NMC (no key, daily forecast), China Meteorological Data (real-name account; observations by default), APIHZ (free, ID + KEY, 3-hour steps). Backup: Tencent Weather (no key), QWeather (KEY). Fallback: Open-Meteo (no key, no alerts), Pirate Weather (KEY).',
@@ -265,6 +341,21 @@ const EN = {
   showForecastDescription: 'Deliver five future horizons and keep the weather_forecast tool.',
   showAlerts: 'Weather alerts',
   showAlertsDescription: 'Deliver active alerts. Alerts are delivered only when they appear, clear or change level.',
+  nowDetail: 'Detail level of current weather',
+  nowDetailDescription:
+    'Brief gives the condition and temperature only (no feels-like); detailed keeps humidity, wind, precipitation, pressure, visibility and AQI. The weather_now tool always returns everything.',
+  forecastDetail: 'Detail level of the forecast',
+  forecastDetailDescription:
+    'Brief gives condition, temperature and precipitation probability per horizon; detailed adds precipitation amount and wind. The nightly next-day push follows this. The weather_forecast tool always returns everything.',
+  horizons: 'Which forecast horizons to deliver',
+  horizonsDescription: 'Switch 1/6/12/24/48 hours individually; at least one stays on, and all-off falls back to 24 hours.',
+  horizon1h: '1 hour ahead',
+  horizon6h: '6 hours ahead',
+  horizon12h: '12 hours ahead',
+  horizon24h: '24 hours ahead',
+  horizon48h: '48 hours ahead',
+  detailBrief: 'Brief',
+  detailDetailed: 'Detailed',
   cmaUserId: 'China Meteorological Data · user ID',
   cmaUserIdDescription:
     'Register with real-name verification at https://data.cma.cn/ and subscribe to a meteorological API product; the user ID comes from the order or account centre. Old API uses it with the password; the new key API can use only the key.',
@@ -385,6 +476,50 @@ export function weatherConfigGroup(language: Language): ConfigGroup {
           type: 'boolean',
           title: t.showAlerts,
           description: t.showAlertsDescription,
+          'x-hot': true,
+        },
+        'worlds.weather.nowDetail': {
+          type: 'string',
+          title: t.nowDetail,
+          description: t.nowDetailDescription,
+          'x-options': 'weatherDetail',
+          'x-hot': true,
+        },
+        'worlds.weather.forecastDetail': {
+          type: 'string',
+          title: t.forecastDetail,
+          description: t.forecastDetailDescription,
+          'x-options': 'weatherDetail',
+          'x-hot': true,
+        },
+        'worlds.weather.horizon1h': {
+          type: 'boolean',
+          title: t.horizon1h,
+          description: `${t.horizons} · ${t.horizonsDescription}`,
+          'x-hot': true,
+        },
+        'worlds.weather.horizon6h': {
+          type: 'boolean',
+          title: t.horizon6h,
+          description: `${t.horizons} · ${t.horizonsDescription}`,
+          'x-hot': true,
+        },
+        'worlds.weather.horizon12h': {
+          type: 'boolean',
+          title: t.horizon12h,
+          description: `${t.horizons} · ${t.horizonsDescription}`,
+          'x-hot': true,
+        },
+        'worlds.weather.horizon24h': {
+          type: 'boolean',
+          title: t.horizon24h,
+          description: `${t.horizons} · ${t.horizonsDescription}`,
+          'x-hot': true,
+        },
+        'worlds.weather.horizon48h': {
+          type: 'boolean',
+          title: t.horizon48h,
+          description: `${t.horizons} · ${t.horizonsDescription}`,
           'x-hot': true,
         },
         'worlds.weather.nightlyPush': {

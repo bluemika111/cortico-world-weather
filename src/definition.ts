@@ -2,6 +2,7 @@ import { describeTools, type WorldDefinition } from 'cortico/world.ts';
 import type { Language } from 'cortico/core/language.ts';
 import {
   WEATHER_DEFAULTS,
+  detailOptions,
   providerOptions,
   type WeatherConfigSection,
 } from './config.ts';
@@ -16,8 +17,11 @@ export const WEATHER: WorldDefinition<WeatherConfigSection> = {
     const issue = preflightIssue(ctx.cfg, (name) => ctx.secret(name));
     if (issue) throw new Error(issue);
   },
-  configOptions: (kind: string, language: Language): Array<{ value: string; label: string }> =>
-    kind === 'weatherProvider' ? providerOptions(language) : [],
+  configOptions: (kind: string, language: Language): Array<{ value: string; label: string }> => {
+    if (kind === 'weatherProvider') return providerOptions(language);
+    if (kind === 'weatherDetail') return detailOptions(language);
+    return [];
+  },
   create: (ctx) =>
     new WeatherWorld({
       cfg: ctx.cfg,
@@ -32,8 +36,8 @@ export const WEATHER: WorldDefinition<WeatherConfigSection> = {
         en: 'Reads the latest current weather for the configured location.',
       },
       weather_forecast: {
-        zh: '读取配置地点未来 1/6/12/24/48 小时的天气，并注明精度是逐小时、3 小时还是逐日。',
-        en: 'Reads the forecast at roughly 1, 6, 12, 24 and 48 hours ahead, stating whether each value is hourly, 3-hourly or daily.',
+        zh: '读取配置地点已开启时次的天气预报，要素写全，并注明精度是逐小时、3 小时还是逐日。',
+        en: 'Reads the forecast at the enabled horizons with every element, stating whether each value is hourly, 3-hourly or daily.',
       },
       weather_alerts: {
         zh: '读取配置地点生效中的天气预警，等级统一为中央气象台的蓝/黄/橙/红四级。',
@@ -44,8 +48,8 @@ export const WEATHER: WorldDefinition<WeatherConfigSection> = {
       {
         type: 'weather.now',
         description: {
-          zh: '现在天气：每次成功取数后递来，正文带数据源的发布时间；旧事件还没投递时会被新事件撤回。',
-          en: 'Current weather after a successful fetch, with the provider publication time; an undelivered older one is withdrawn.',
+          zh: '现在天气：每次成功取数后递来，简略只写天气现象与气温，详细照旧；正文带数据源的发布时间，旧事件还没投递时会被新事件撤回。',
+          en: 'Current weather after a successful fetch; brief gives condition and temperature only, detailed keeps every element. Carries the provider publication time, and an undelivered older one is withdrawn.',
         },
         trigger: 'piggyback',
         tags: ['snapshot'],
@@ -53,8 +57,8 @@ export const WEATHER: WorldDefinition<WeatherConfigSection> = {
       {
         type: 'weather.forecast',
         description: {
-          zh: '未来天气：1/6/12/24/48 小时后的天气；逐日源会在正文里注明精度。旧事件还没投递时会被新事件撤回。',
-          en: 'Forecast at 1/6/12/24/48 hours ahead; daily-only providers say so in the text. An undelivered older one is withdrawn.',
+          zh: '未来天气：按开关选中的时次递来，简略写天气现象、气温与降水概率，详细再加降水量与风；逐日源会在正文里注明精度。旧事件还没投递时会被新事件撤回。',
+          en: 'Forecast for the enabled horizons; brief gives condition, temperature and precipitation probability, detailed adds precipitation and wind. Daily-only providers say so in the text. An undelivered older one is withdrawn.',
         },
         trigger: 'piggyback',
         tags: ['snapshot'],

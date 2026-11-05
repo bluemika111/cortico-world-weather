@@ -13,6 +13,9 @@ export type HorizonHours = 1 | 6 | 12 | 24 | 48;
 
 export const HORIZON_HOURS: readonly HorizonHours[] = [1, 6, 12, 24, 48];
 
+/** 事件正文的详略：brief 只给天气与气温（未来时次多一个降水概率），detailed 给全部要素。 */
+export type DetailMode = 'brief' | 'detailed';
+
 export interface WeatherNow {
   observedAtMs?: number;
   condition?: string;
