@@ -126,16 +126,9 @@ WEATHER_PIRATE_KEY=
 
 `package.json` 的 `cortico.tags` 只声明 `internet`：本包会向互联网请求天气数据。第三方文本的注入风险已经在投递层处理（见「事件」一节），所以不再自我声明 `injection-risk`。
 
-市场索引会沿用维护者此前打过的警示标签，直到他们移除。要摘掉已经显示的「注入风险」，需要向 <https://github.com/Pal-AI-Lab/cortico-extensions> 提一个 issue：
+市场索引会沿用维护者此前打过的警示标签，直到他们移除。摘掉已经显示的「注入风险」要向 <https://github.com/Pal-AI-Lab/cortico-extensions> 提一个 `[tags] 包名` 的 issue（字段是 `package` / `remove` / `reason` / `evidence`；`add` 留空，写「无」会被 triage 当成未知标签）。
 
-```text
-标题：[tags] cortico-world-weather
-正文：
-package: cortico-world-weather
-remove: injection-risk
-reason: 0.2.0 起四类天气事件都按 origin:'external' 框定投递，数据源写的文本先压平限长，预警标题再加「」边界，不再符合 injection-risk 的判定条件。
-evidence: <修复提交> / <0.2.0 的 npm 页面>
-```
+0.2.0 的申请已经提交：<https://github.com/Pal-AI-Lab/cortico-extensions/issues/742>，证据指向修复提交、`push()` 的 external 出口、回归测试与 npm 页面。
 
 ## 已知限制
 
