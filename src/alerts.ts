@@ -4,7 +4,7 @@ import { parseLocalStamp, validText } from './location.ts';
 
 const NMC_TYPES = [
   '暴雨', '暴雪', '寒潮', '大风', '沙尘暴', '高温', '干旱', '雷电', '冰雹', '霜冻',
-  '大雾', '霾', '道路结冰', '台风', '龙卷风', '强对流', '地质灾害', '山洪', '渍涝',
+  '大雾', '霾', '道路结冰', '道路冰雪', '台风', '龙卷风', '强对流', '地质灾害', '山洪', '渍涝',
   '雪灾', '低温', '海上大风', '森林火险', '草原火险', '臭氧', '重污染',
 ] as const;
 
@@ -59,6 +59,27 @@ export function senderFromTitle(title: string): string | undefined {
   return match?.[1];
 }
 
+const CN_STAMP = /(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2})时(?:\s*(\d{1,2})分)?/;
+const ISO_STAMP = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::\d{2})?/;
+const pad2 = (value: string): string => value.padStart(2, '0');
+
+/**
+ * 中央气象台同一份预警在两个接口里措辞不同：站点接口的标题里嵌着发报时间，列表接口没有。
+ * 把那段时间摘掉，标题才能对齐去重；摘下来的时间在没有 issuetime 时当发报时间用。
+ */
+export function normalizeAlertTitle(title: string, timezone: string): { title: string; at?: number } {
+  for (const pattern of [CN_STAMP, ISO_STAMP]) {
+    const match = title.match(pattern);
+    if (!match) continue;
+    const cleaned = title.replace(pattern, '').replace(/\s{2,}/g, ' ').trim();
+    // 整条标题只有时间时别切，否则会变成空标题。
+    if (cleaned.length < 6) continue;
+    const wall = `${match[1]}-${pad2(match[2] ?? '')}-${pad2(match[3] ?? '')} ${pad2(match[4] ?? '')}:${pad2(match[5] ?? '0')}`;
+    return { title: cleaned, at: parseLocalStamp(wall, timezone) };
+  }
+  return { title: title.trim() };
+}
+
 export function makeAlert(input: {
   id?: unknown;
   type?: unknown;
@@ -71,11 +92,13 @@ export function makeAlert(input: {
   url?: unknown;
   timezone: string;
 }): WeatherAlert | null {
-  const title = validText(input.title);
+  const rawTitle = validText(input.title);
+  const stamped = rawTitle === undefined ? undefined : normalizeAlertTitle(rawTitle, input.timezone);
+  const title = stamped?.title;
   const type = typeFrom(input.type, title);
   const level = levelFrom(input.level ?? title);
   if (!title && type === '气象预警' && level === '未知') return null;
-  const issued = parseLocalStamp(input.issuedAt, input.timezone);
+  const issued = parseLocalStamp(input.issuedAt, input.timezone) ?? stamped?.at;
   const expires = parseLocalStamp(input.expiresAt, input.timezone);
   const description = validText(input.description);
   const sender = validText(input.sender) ?? senderFromTitle(title ?? '');
@@ -99,7 +122,9 @@ export function dedupeAlerts(alerts: readonly WeatherAlert[]): WeatherAlert[] {
   const seenContent = new Set<string>();
   const out: WeatherAlert[] = [];
   for (const alert of alerts) {
-    const contentKey = `${alert.title}|${alert.level}|${alert.issuedAtMs ?? ''}`;
+    // 标题里已含发布单位和类别，同类型同等级的同一标题就是同一条预警；
+    // 不把发报时间放进键里，两个接口给的时间偶尔会差一分钟。
+    const contentKey = `${alert.type}|${alert.level}|${alert.title}`;
     if (seenIds.has(alert.id) || seenContent.has(contentKey)) continue;
     seenIds.add(alert.id);
     seenContent.add(contentKey);

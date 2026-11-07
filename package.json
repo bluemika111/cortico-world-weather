@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-weather",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Cortico World: hands Coo current weather, 1/6/12/24/48-hour forecasts and China Meteorological Administration-style alerts from seven selectable providers",
   "license": "MIT",

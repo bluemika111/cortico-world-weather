@@ -12,7 +12,7 @@ import { fetchPirate } from '../src/providers/pirate.ts';
 import { fetchCma } from '../src/providers/cma.ts';
 import { fetchWeather } from '../src/providers/index.ts';
 import { credentialIssue, preflightIssue } from '../src/credentials.ts';
-import { levelFrom, typeFrom } from '../src/alerts.ts';
+import { levelFrom, makeAlert, typeFrom } from '../src/alerts.ts';
 
 const NOW = Date.parse('2026-11-02T20:45:00+08:00');
 const TZ = 'Asia/Shanghai';
@@ -108,6 +108,41 @@ describe('中央气象台适配器', () => {
     expect(snapshot.alerts).toHaveLength(1);
     expect(snapshot.alerts[0]).toMatchObject({ id: 'bj1', type: '暴雨', level: '蓝色' });
     expect(snapshot.limitations.join('')).toContain('逐日预报');
+  });
+
+  it('站点预警与列表里的同一条预警只保留一条', async () => {
+    // 站点接口的标题带发报时间前缀，列表接口不带，两者其实是同一条预警。
+    const withWarn = clone(weather);
+    (withWarn.real as Record<string, unknown>).warn = {
+      alert: '2026年11月07日02时北京市气象台发布雷电黄色预警信号',
+      signaltype: '雷电',
+      signallevel: '黄色',
+      issuetime: '2026/11/07 02:15',
+      issuecontent: '预计未来 6 小时有雷电活动。',
+      url: '/publish/alarm/bj-ld.html',
+    };
+    const alertPayload = {
+      data: {
+        page: {
+          list: [
+            {
+              alertid: 'bj-ld',
+              title: '北京市气象台发布雷电黄色预警信号',
+              issuetime: '2026/11/07 02:15',
+              url: '/publish/alarm/bj-ld.html',
+            },
+          ],
+        },
+        provinceAlarms: [],
+      },
+    };
+    const snapshot = await fetchNmc(
+      makeRequest({ provider: 'nmc', province: '北京市', city: '北京' }, fetcherWith(withWarn, alertPayload)),
+    );
+
+    expect(snapshot.alerts).toHaveLength(1);
+    expect(snapshot.alerts[0]).toMatchObject({ type: '雷电', level: '黄色', title: '北京市气象台发布雷电黄色预警信号' });
+    expect(snapshot.alerts[0].issuedAtMs).toBe(Date.parse('2026-11-07T02:15:00+08:00'));
   });
 
   it('显式填了城市代码就不查省市列表', async () => {
@@ -519,5 +554,26 @@ describe('配置里多打的空格', () => {
   it('自动解析经纬度的报错里也不留空格', async () => {
     const req = request({ provider: 'openmeteo', province: '上海市 ', city: '不存在的地方 ' }, () => ({ results: [] }));
     await expect(fetchWeather(req)).rejects.toThrow('无法根据「上海市 不存在的地方」自动获取经纬度');
+  });
+});
+
+describe('预警标题里的发报时间', () => {
+  it('标题中段的发报时间会摘掉，并当作缺省发报时间', () => {
+    const alert = makeAlert({
+      title: '广州市气象台2026年11月7日2时15分发布雷电黄色预警信号',
+      timezone: TZ,
+    });
+    expect(alert?.title).toBe('广州市气象台发布雷电黄色预警信号');
+    expect(alert?.issuedAtMs).toBe(Date.parse('2026-11-07T02:15:00+08:00'));
+  });
+
+  it('ISO 写法的时间前缀也摘掉', () => {
+    const alert = makeAlert({ title: '2026-11-07T02:15 广州市气象台发布雷电黄色预警信号', timezone: TZ });
+    expect(alert?.title).toBe('广州市气象台发布雷电黄色预警信号');
+  });
+
+  it('标题只有时间时不切', () => {
+    const alert = makeAlert({ title: '2026年11月7日2时15分', type: '雷电', level: '黄色', timezone: TZ });
+    expect(alert?.title).toBe('2026年11月7日2时15分');
   });
 });

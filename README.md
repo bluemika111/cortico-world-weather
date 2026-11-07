@@ -120,6 +120,8 @@ WEATHER_PIRATE_KEY=
 - 和风天气：`severityColor`（Blue/Yellow/Orange/Red）优先，其次 `severity`（Minor/Moderate/Severe/Extreme）。
 - Pirate Weather：`minor → 蓝`、`moderate → 黄`、`severe → 橙`、`extreme → 红`。
 - 类别：中文灾害名直接匹配（暴雨、大风、寒潮、高温……），英文标题按关键词归类；认不出的保留原标题。
+- 标题里的发报时间（`2026年11月7日2时15分`、`2026-11-07T02:15`）统一摘掉，只留发布单位与预警名；没有单独的发布时间字段时，用摘下来的时间当发报时间。
+- 同一条预警会按「类别 + 等级 + 标题」去重：中央气象台的站点接口和全省列表接口对同一条预警的措辞不同（一个标题带发报时间、一个不带），去重后只列一条。
 - 无法判断等级时标「未知」，不替数据源升级或降级。
 
 ### 标签
@@ -149,7 +151,7 @@ WEATHER_PIRATE_KEY=
 cd cortico-world-weather
 corepack pnpm install
 corepack pnpm run build          # 面板产物 dist/webui.js
-corepack pnpm exec vitest run    # 87 个用例
+corepack pnpm exec vitest run    # 91 个用例
 corepack pnpm exec tsc --noEmit
 corepack pnpm exec tsc -p tsconfig.web.json --noEmit
 corepack pnpm run describe       # 重新生成 describe.json
@@ -177,11 +179,11 @@ corepack pnpm exec tsx scripts/extension-check.ts "<扩展目录>/cortico-world-
 | `src/model-text.ts` | 事件正文（含次日天气）与工具回执：简略/详细两种写法，数据源写的文本压平限长。 |
 | `src/webui/client.ts` | 「天气开关」面板：三项开关、两个详略下拉、五个时次开关、每晚推送组、上一次获取。 |
 | `src/ENV_PROMPT.md` | 环境提示词。 |
-| `tests/` | 87 个用例：时间/时次、七个适配器、正文、World 接线、面板状态、manifest/describe。 |
+| `tests/` | 91 个用例：时间/时次、七个适配器、正文、World 接线、面板状态、manifest/describe。 |
 
 ### 测试与验证状态
 
-- `corepack pnpm exec vitest run` → 87/87 通过。
+- `corepack pnpm exec vitest run` → 91/91 通过。
 - 两端 `tsc --noEmit` → 0 错误。
 - `corepack pnpm run build` → `dist/webui.js`。
 - 扩展契约检查 → `Extension check passed.`

@@ -22,6 +22,7 @@ corepack pnpm exec tsx scripts/extension-check.ts "<扩展目录>/cortico-world-
 ## 本包的注意事项
 
 - 中央气象台的 `stationid` 是城市代码（如 `Wqsps`），不是 54511 站号；城市列表在 `/rest/province/{省代码}`。
+- 同一条预警会同时出现在站点 `warn`（标题带 `2026年11月07日02时…` 前缀、`issuetime` 常为空）和 `findAlarm` 列表（标题不带前缀）里：`makeAlert()` 用 `normalizeAlertTitle()` 摘掉时间前缀并把它当缺省发报时间，`dedupeAlerts()` 按「类别|等级|标题」比较。别退回按原标题比较，也别把发报时间放进去重键。
 - 接口盒子和腾讯天气通常只认到地级市；`placeCandidates()` 会把「南宁市武鸣区」展开成「南宁市」重试，回退成功时正文要写明实际查询地名。
 - Open-Meteo / Pirate Weather / 和风天气的经纬度由 `geocode.ts` 按省市解析并回填；解析失败要报错让用户手填，不能静默沿用旧城市。
 - 和风天气的 API Host 因免费版/商业版/项目而异；403 时提示用户填配置里的 `qweatherHost`。
